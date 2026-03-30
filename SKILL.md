@@ -277,22 +277,51 @@ After building the HTML:
 
 **Step 6: Export to PDF**
 
-Generate the PDF for presenting:
+**CRITICAL: Do NOT use `npx playwright pdf`** -- it does not support `printBackground` and will silently strip all background colors, gradients, and dark sections from the PDF. Use a Python script instead:
 
-```bash
-npx playwright pdf http://localhost:8765/presentation.html presentation.pdf --paper-format=Ledger
+```python
+# export_pdf.py
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page()
+    page.goto('http://localhost:8765/presentation.html', wait_until='networkidle')
+    page.pdf(
+        path='presentation.pdf',
+        width='17in',
+        height='11in',
+        margin={'top': '0', 'right': '0', 'bottom': '0', 'left': '0'},
+        print_background=True,
+        prefer_css_page_size=True,
+    )
+    browser.close()
 ```
 
-Add print CSS to handle the size difference between slide (1920x1080) and paper:
+If Python Playwright is not installed, run `pip install playwright` first. The browsers from `npx playwright` are shared and do not need to be reinstalled.
+
+**Required print CSS in the HTML** -- both the `@page` rule AND `print-color-adjust: exact` are needed. Add this to the presentation stylesheet:
 ```css
+/* Force backgrounds to render in print/PDF */
+* {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+
 @page { size: 17in 11in; margin: 0; }
 @media print {
-  body { background: white; margin: 0; padding: 0; width: 17in; }
-  section.slide { margin: 0; box-shadow: none; zoom: 0.85; }
+  body { background: white !important; margin: 0; padding: 0; width: 17in; gap: 0; }
+  section.slide {
+    margin: 0;
+    box-shadow: none;
+    zoom: 0.85;
+    page-break-after: always;
+  }
 }
 ```
 
-Verify the PDF has the correct page count (one page per slide). If a slide spills, the content needs to be trimmed or the layout adjusted -- never let slides overflow.
+Verify the PDF has the correct page count (one page per slide). If a slide spills, the content needs to be trimmed or the layout adjusted -- never let slides overflow. Also verify the PDF file size is comparable to the HTML -- if the PDF is suspiciously small (e.g., 300KB vs 900KB expected), backgrounds are likely being stripped.
 
 **Step 7: Present deliverables to user**
 
@@ -326,7 +355,8 @@ The skill uses tools that are commonly available -- no exotic dependencies:
 | Tool | Purpose | Likely Status |
 |---|---|---|
 | matplotlib | Data charts (pie, bar, line, dual-axis) | Usually installed |
-| Playwright | Screenshots for verification, PDF export | Check with `npx playwright --version` |
+| Playwright (npx) | Screenshots for slide verification | Check with `npx playwright --version` |
+| Playwright (Python) | PDF export with `print_background=True` | `pip install playwright` -- required for correct PDF colors |
 | PIL/Pillow | Image cropping for slide-by-slide verification | Usually installed with matplotlib |
 | Python http.server | Local server for Playwright | Built into Python |
 | Recraft V3 API | AI-generated illustrations (characters, objects, icons) | Optional -- needs API key in `.env` |
@@ -335,7 +365,8 @@ The skill uses tools that are commonly available -- no exotic dependencies:
 - If Recraft API key is available and user wants illustrations -> use Recraft V3
 - If no Recraft but illustrations are needed -> use inline SVG (Claude-generated geometric figures)
 - If matplotlib is not installed -> use inline SVG for charts too
-- If Playwright is not available -> user prints to PDF from browser manually
+- If Python Playwright is not installed -> `pip install playwright` (shares browsers with npx version)
+- If Playwright is not available at all -> user prints to PDF from browser manually (Ctrl+P, enable "Background graphics")
 
 ## Output Structure
 
