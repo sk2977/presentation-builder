@@ -23,7 +23,7 @@ The result looks like it was designed by a professional agency -- not a PowerPoi
 
 ```bash
 # Clone the repo
-git clone https://github.com/skimb/presentation-builder.git
+git clone https://github.com/sk2977/presentation-builder.git
 
 # Copy to Claude Code skills directory
 cp -r presentation-builder ~/.claude/skills/presentation-builder
@@ -32,7 +32,7 @@ cp -r presentation-builder ~/.claude/skills/presentation-builder
 ### Option 2: Symlink (for development)
 
 ```bash
-git clone https://github.com/skimb/presentation-builder.git
+git clone https://github.com/sk2977/presentation-builder.git
 ln -s "$(pwd)/presentation-builder" ~/.claude/skills/presentation-builder
 ```
 

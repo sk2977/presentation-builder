@@ -19,6 +19,9 @@ venv/
 graphics/*.png
 !examples/**/*.png
 
+# Node
+node_modules/
+
 # OS files
 .DS_Store
 Thumbs.db

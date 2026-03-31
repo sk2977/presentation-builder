@@ -268,7 +268,7 @@ This layout ensures:
 
 After building the HTML:
 
-1. Start a local server: `python -m http.server 8765`
+1. Start a local server: `python -m http.server 8765 --bind 127.0.0.1`
 2. Take a full-page screenshot: `npx playwright screenshot --viewport-size="1920,7700" --full-page http://localhost:8765/presentation.html`
 3. Crop individual slides using PIL for inspection
 4. Check each slide for: content overflow, chart sizing, text readability, color consistency, layout alignment
