@@ -264,18 +264,87 @@ This layout ensures:
 
 **The intro slide** should use `display: flex` (not the grid), centered content, dark background with brand gradient, and placeholder text for the user to fill in (`[Your Name]`, `[Date]`, etc.).
 
-**Step 5: Verify with Playwright**
+**Step 5: Render Verification with Playwright**
 
-After building the HTML:
+After building the HTML, verify that every slide renders correctly:
 
 1. Start a local server: `python -m http.server 8765 --bind 127.0.0.1`
-2. Take a full-page screenshot: `npx playwright screenshot --viewport-size="1920,7700" --full-page http://localhost:8765/presentation.html`
-3. Crop individual slides using PIL for inspection
-4. Check each slide for: content overflow, chart sizing, text readability, color consistency, layout alignment
-5. Fix any issues found
-6. Stop the server
+2. Open the presentation in Playwright at 1920x1080 viewport:
+   ```bash
+   playwright-cli open http://localhost:8765/presentation.html
+   playwright-cli resize 1920 1080
+   ```
+3. Query the DOM to discover all slides:
+   ```bash
+   playwright-cli eval "JSON.stringify(Array.from(document.querySelectorAll('.slide')).map(function(s,i){return {slide:i+1, id:s.id}}))"
+   ```
+4. Screenshot each slide individually by scrolling to it:
+   ```bash
+   playwright-cli eval "document.querySelector('#s1').scrollIntoView()"
+   playwright-cli screenshot --filename=data/screenshots/slide1.png
+   # repeat for each slide
+   ```
+5. Read each screenshot image to check for: content overflow, chart sizing, broken layouts, missing images
+6. Fix any render-breaking issues before proceeding to the design audit
 
-**Step 6: Export to PDF**
+**Step 6: Design Audit & A/B Testing**
+
+This is an independent aesthetic review of the finished deck. The goal is to catch design issues that a render check misses -- contrast problems, font sizes below the presentation minimum, wasted whitespace, visual hierarchy failures, and CSS bugs.
+
+**Audit procedure:**
+
+1. **Read every screenshot** from Step 5 as images. For each slide, evaluate against this checklist:
+
+   | Dimension | What to check |
+   |---|---|
+   | **Contrast** | Text on colored backgrounds must be readable. Check header badges, callout text, links on dark/colored surfaces. WCAG AA minimum (4.5:1 for body text, 3:1 for large text). |
+   | **Font floor** | Body text must meet the minimum set in the storyboard or style guide (typically 18px+ for presentations). Measure by reading inline `font-size` styles. Common offenders: table cells, card bullets, footnotes. |
+   | **Whitespace** | No slide should have large empty areas below content. Tables, charts, and cards should fill their containers. Use `flex: 1` or increased padding to distribute space. |
+   | **CSS correctness** | Grep for common bugs: `border-radius: 50` (missing `%`), unclosed tags, `position: absolute` elements that could overlap. |
+   | **Visual hierarchy** | The most important information on each slide should be the largest/boldest element. Numbers the audience needs to remember should be in stat boxes, not buried in paragraphs. |
+   | **Color consistency** | Same data category = same color across all slides. Check that the style guide palette is applied consistently. |
+
+2. **Read the HTML source** to verify inline styles match the design intent. Grep for font sizes below the minimum:
+   ```bash
+   # Find all font-size declarations below 18px (adjust threshold to match style guide)
+   grep -oP 'font-size:\s*\d+px' presentation.html | sort | uniq -c | sort -n
+   ```
+
+3. **Write a slide-by-slide review** with findings structured as:
+   - **Good:** What works well on this slide (anchor points to preserve)
+   - **Issues:** Specific problems with the dimension they violate
+   - **Priority fix list:** Top 5 improvements ranked by visual impact
+
+4. **If issues are found, create `presentationB.html`:**
+   - Copy the original: `cp presentation.html presentationB.html`
+   - Apply all fixes from the priority list to the B variant
+   - Do NOT modify the original `presentation.html` -- it stays as-is for comparison
+
+5. **Screenshot the B variant** using the same per-slide procedure from Step 5:
+   ```bash
+   playwright-cli goto http://localhost:8765/presentationB.html
+   # screenshot each slide as slideB1.png, slideB2.png, etc.
+   ```
+
+6. **Present the A/B comparison to the user.** For each slide that changed, show:
+   - The A screenshot (original) and the B screenshot (updated)
+   - A table summarizing what changed and why
+   - A verdict on which is better
+
+7. **Let the user decide:**
+   - **Pick B:** Rename `presentationB.html` to `presentation.html` (replace the original)
+   - **Pick A:** Delete `presentationB.html`, keep the original
+   - **Cherry-pick:** User specifies which fixes to keep; apply only those to the original
+
+**Common fixes this audit catches:**
+- Low-contrast text on colored headers (swap to white text or add a frosted badge background)
+- Font sizes below the presentation minimum (15-16px table cells that should be 17-18px)
+- Slides with content crammed into the top half and empty space below (add `flex: 1` to tables, increase row padding)
+- CSS unit bugs (`border-radius: 50` instead of `50%`, missing `px` units)
+- Key numbers buried in text instead of elevated into stat boxes
+- Inconsistent card/table sizing between slides that should feel uniform
+
+**Step 7: Export to PDF**
 
 **CRITICAL: Do NOT use `npx playwright pdf`** -- it does not support `printBackground` and will silently strip all background colors, gradients, and dark sections from the PDF. Use a Python script instead:
 
@@ -323,14 +392,15 @@ If Python Playwright is not installed, run `pip install playwright` first. The b
 
 Verify the PDF has the correct page count (one page per slide). If a slide spills, the content needs to be trimmed or the layout adjusted -- never let slides overflow. Also verify the PDF file size is comparable to the HTML -- if the PDF is suspiciously small (e.g., 300KB vs 900KB expected), backgrounds are likely being stripped.
 
-**Step 7: Present deliverables to user**
+**Step 8: Present deliverables to user**
 
 Tell the user what was produced:
-- `presentation.html` -- open in browser for full-resolution viewing
+- `presentation.html` -- open in browser for full-resolution viewing (the final version after A/B resolution)
 - `presentation.pdf` -- for presenting and sharing
 - `storyboard.md` -- content reference (if created)
 - `style_guide.md` -- visual specs (if created)
 - `graphics/` -- chart PNG assets and source scripts
+- `data/screenshots/` -- per-slide screenshots (slide1.png ... slideN.png, and slideB*.png if A/B test was run)
 
 ## Design Principles
 
@@ -375,6 +445,7 @@ project/
   storyboard.md                # Content (created or provided)
   style_guide.md               # Visual specs (created or provided)
   presentation.html            # The presentation (primary deliverable)
+  presentationB.html           # A/B variant with design fixes (if audit found issues)
   presentation.pdf             # PDF export (for presenting)
   graphics/
     src/
@@ -383,6 +454,10 @@ project/
       generate_recraft.py       # Recraft API generation script (if used)
     [chart_name].png            # Generated chart images
     recraft_[name].png          # AI-generated illustrations (if Recraft used)
+  data/
+    screenshots/
+      slide1.png ... slideN.png   # Per-slide screenshots (A version)
+      slideB1.png ... slideBN.png # Per-slide screenshots (B version, if A/B test run)
 ```
 
 ## Common Slide Types
